@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.colors import ListedColormap
 from matplotlib.cm import get_cmap
-from typing import Dict, Union, Optional, List, Any
-from matplotlib.colors import to_rgb, to_hex
+from typing import Dict, Union, Optional, Tuple, List, Any
+from matplotlib.colors import to_rgb, to_hex, ListedColormap, BoundaryNorm
 import colorsys
 
 def load_lut_csv(path: str) -> Dict[str, str]:
@@ -49,7 +49,9 @@ class ColorManager:
     }
 
     def __init__(self):
-        """Initialize ColorManager with empty custom colormap registry."""
+        """
+        Initialize ColorManager with empty custom colormap registry.
+        """
         self.custom_cmaps = {}
 
     def add_cmap(self, name: str, cmap: Dict[str, str]) -> None:
@@ -59,12 +61,34 @@ class ColorManager:
         Parameters
         ----------
         name : str
-            Name identifier for the colormap
+            Name identifier for the colormap.
         cmap : dict
-            Dictionary mapping categories to color values
+            Dictionary mapping categories to color values.
         """
         self.custom_cmaps[name] = cmap
 
+    def dict_to_listed_cmap(self, cmap_dict: Dict[str, str]) -> Tuple[ListedColormap, BoundaryNorm]:
+        """
+        Convert a {label_id: color_hex} dictionary into a matplotlib ListedColormap + BoundaryNorm.
+
+        Parameters
+        ----------
+        cmap_dict : dict
+            Dictionary mapping label IDs (int or str) to hex color codes.
+
+        Returns
+        -------
+        cmap : ListedColormap
+            The generated colormap for matplotlib.
+        norm : BoundaryNorm
+            Normalization mapping label IDs to color indices.
+        """
+        sorted_ids = sorted(int(k) for k in cmap_dict.keys())
+        colors = [cmap_dict[str(k)] for k in sorted_ids]
+        cmap = ListedColormap(colors, name="custom_cmap")
+        norm = BoundaryNorm(sorted_ids + [max(sorted_ids) + 1], cmap.N)
+        return cmap, norm
+    
     def get_cmap(self, name: str, factor: Optional[float] = None, alpha: Optional[float] = None) -> Dict[str, str]:
         """
         Retrieve a colormap by name, optionally adjusting brightness and simulated alpha.
@@ -72,16 +96,16 @@ class ColorManager:
         Parameters
         ----------
         name : str
-            Name of the colormap to retrieve
+            Name of the colormap to retrieve.
         factor : float, optional
-            Brightness factor (>1 = brighter, <1 = darker)
+            Brightness factor (>1 = brighter, <1 = darker).
         alpha : float, optional
-            Simulated alpha blending with white background (0–1)
+            Simulated alpha blending with white background (0–1).
 
         Returns
         -------
         dict
-            Adjusted color mapping
+            Adjusted color mapping.
         """
         if name in self.custom_cmaps:
             cmap = self.custom_cmaps[name]
@@ -102,9 +126,46 @@ class ColorManager:
 
         return adjusted_cmap
 
+    def get_matplotlib_cmap(self, name: str, factor: Optional[float] = None, alpha: Optional[float] = None) -> Tuple[ListedColormap, BoundaryNorm]:
+        """
+        Get a matplotlib colormap and normalization from a named colormap.
+
+        Parameters
+        ----------
+        name : str
+            Name of the colormap to retrieve.
+        factor : float, optional
+            Brightness factor (>1 = brighter, <1 = darker).
+        alpha : float, optional
+            Simulated alpha blending with white background (0–1).
+
+        Returns
+        -------
+        cmap : ListedColormap
+            Matplotlib colormap object.
+        norm : BoundaryNorm
+            Normalization for mapping data values to colors.
+        """
+        adjusted_cmap = self.get_cmap(name, factor, alpha)
+        return self.dict_to_listed_cmap(adjusted_cmap)
+
     def simulate_alpha_blend(self, color: str, alpha: float, background: str = "#FFFFFF") -> str:
         """
-        模擬 alpha 效果，將 color 與背景色混合，實現 alpha 混色後的結果（返回 hex）。
+        Simulate alpha blending effect by mixing color with background.
+
+        Parameters
+        ----------
+        color : str
+            Foreground color (hex or color name).
+        alpha : float
+            Alpha value for blending (0-1).
+        background : str, default "#FFFFFF"
+            Background color for blending.
+
+        Returns
+        -------
+        str
+            Blended color in hex format.
         """
         fg_rgb = to_rgb(color)  # 會自動處理 hex or name
         bg_rgb = to_rgb(background)
@@ -125,16 +186,16 @@ class ColorManager:
         Parameters
         ----------
         data : DataFrame or Series
-            Data containing categorical values
+            Data containing categorical values.
         custom_cmap : dict, optional
-            Custom color mapping to override defaults
+            Custom color mapping to override defaults.
         default_palette : str, default "Set1"
-            Name of seaborn palette for default colors
+            Name of seaborn palette for default colors.
 
         Returns
         -------
         dict
-            Mapping from categories to color values
+            Mapping from categories to color values.
         """
         # 獲取唯一類別
         if isinstance(data, pd.DataFrame):
@@ -171,16 +232,16 @@ class ColorManager:
         Parameters
         ----------
         data : DataFrame or Series
-            Data to apply color mapping to
+            Data to apply color mapping to.
         cmap : dict
-            Color mapping dictionary
+            Color mapping dictionary.
         missing_color : str, default "#FFFFFF"
-            Color for missing or unmapped values
+            Color for missing or unmapped values.
 
         Returns
         -------
         DataFrame or Series
-            Data with values replaced by corresponding colors
+            Data with values replaced by corresponding colors.
         """
         return data.map(lambda x: cmap.get(x, missing_color))
 
@@ -194,16 +255,16 @@ class ColorManager:
         Parameters
         ----------
         categories : list
-            List of category names
+            List of category names.
         colors : list
-            Corresponding list of color values
+            Corresponding list of color values.
         unknown_color : str, default "white"
-            Color for unknown/unmapped categories
+            Color for unknown/unmapped categories.
 
         Returns
         -------
         ListedColormap
-            Matplotlib colormap object
+            Matplotlib colormap object.
         """
         color_list = list(colors)
         color_list.append(unknown_color)  # 為未知類別添加顏色
@@ -216,17 +277,17 @@ class ColorManager:
         Parameters
         ----------
         color : str
-            Any valid matplotlib color (hex, name, etc.)
+            Any valid matplotlib color (hex, name, etc.).
         factor : float
             Brightness adjustment factor:
             - 1.0 = no change
             - <1.0 = darker
-            - >1.0 = brighter
+            - >1.0 = brighter.
 
         Returns
         -------
         str
-            Adjusted color in hex format
+            Adjusted color in hex format.
         """
         # Convert color to RGB (0–1 float)
         r, g, b = to_rgb(color)
@@ -255,20 +316,20 @@ class ColorManager:
         Parameters
         ----------
         categories : list
-            List of unique categories to create color mapping for
+            List of unique categories to create color mapping for.
         cmap_name : str, default "tab20"
             Name of matplotlib colormap to use. Popular choices:
             - "tab20": 20 distinct colors, good for many categories
             - "Set1": 9 bright colors, good for fewer categories  
             - "Set3": 12 pastel colors
-            - "viridis", "plasma": continuous colormaps
+            - "viridis", "plasma": continuous colormaps.
         as_hex : bool, default True
             If True, return colors as hex strings. If False, return as RGBA tuples.
 
         Returns
         -------
         dict
-            Dictionary mapping categories to color values
+            Dictionary mapping categories to color values.
 
         Examples
         --------
